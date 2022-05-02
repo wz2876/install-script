@@ -1176,6 +1176,8 @@ function updateTrojanPanel() {
   wget --no-check-certificate -O ${TROJAN_PANEL_UI_DATA}trojan-panel-ui.tar.gz ${TROJAN_PANEL_UI_URL} \
   && tar -zxvf ${TROJAN_PANEL_UI_DATA}trojan-panel-ui.tar.gz -C ${TROJAN_PANEL_UI_UPDATE_DIR}
 
+  read -r -p '请输入数据库的IP地址(默认:本机数据库): ' mariadb_ip
+  [ -z "${mariadb_ip}" ] && mariadb_ip="trojan-panel-mariadb"
   read -r -p '请输入数据库的用户名(默认:root): ' mariadb_user
   [ -z "${mariadb_user}" ] && mariadb_user="root"
   while read -r -p '请输入数据库的密码(必填): ' mariadb_pas; do
