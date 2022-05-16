@@ -10,6 +10,7 @@ export PATH
 #   Github: https://github.com/trojanpanel/install-script         #
 #=================================================================#
 
+
 echoContent() {
   case $1 in
   # 红色
@@ -58,12 +59,20 @@ initVar() {
   # 项目目录
   TP_DATA='/tpdata/'
 
+  static_html='https://github.com/trojanpanel/install-script/releases/latest/download/html.tar.gz'
+
   # MariaDB
   MARIA_DATA='/tpdata/mariadb/'
   mariadb_ip='trojan-panel-mariadb'
   mariadb_port=9507
   mariadb_user='root'
   mariadb_pas=''
+
+  #Redis
+  REDIS_DATA='/tpdata/redis/'
+  redis_host='trojan-panel-redis'
+  redis_port=6378
+  redis_pass=''
 
   # Trojan Panel
   TROJAN_PANEL_DATA='/tpdata/trojan-panel/'
@@ -93,8 +102,6 @@ initVar() {
   key_path=''
   ssl_option=1
 
-  trojan_pas=''
-  remote_addr='trojan-panel-caddy'
   # trojanGFW
   TROJANGFW_DATA='/tpdata/trojanGFW/'
   TROJANGFW_CONFIG='/tpdata/trojanGFW/config.json'
@@ -111,8 +118,18 @@ initVar() {
   trojanGO_shadowsocks_method='AES-128-GCM'
   trojanGO_shadowsocks_password=''
   trojanGO_mux_enable=true
+  # trojan
+  trojan_pas=''
+  remote_addr='trojan-panel-caddy'
 
-  static_html='https://github.com/trojanpanel/install-script/releases/latest/download/html.tar.gz'
+  # hysteria
+  HYSTERIA_DATA='/tpdata/hysteria/'
+  HYSTERIA_CONFIG='/tpdata/hysteria/config.json'
+  HYSTERIA_STANDALONE_CONFIG='/tpdata/hysteria/standalone_config.json'
+  hysteria_port=443
+  hysteria_password=''
+  hysteria_protocol='udp'
+  trojan_panel_url=''
 }
 
 function mkdirTools() {
@@ -121,6 +138,9 @@ function mkdirTools() {
 
   # MariaDB
   mkdir -p ${MARIA_DATA}
+
+  # Redis
+  mkdir -p ${REDIS_DATA}
 
   # Trojan Panel
   mkdir -p ${TROJAN_PANEL_DATA}
@@ -149,6 +169,11 @@ function mkdirTools() {
   mkdir -p ${TROJANGO_DATA}
   touch ${TROJANGO_CONFIG}
   touch ${TROJANGO_STANDALONE_CONFIG}
+
+  # hysteria
+  mkdir -p ${HYSTERIA_DATA}
+  touch ${HYSTERIA_CONFIG}
+  touch ${HYSTERIA_STANDALONE_CONFIG}
 }
 
 function checkSystem() {
@@ -239,7 +264,8 @@ function installDockerCentOS(){
   device-mapper-persistent-data \
   lvm2 \
   tar \
-  lsof
+  lsof \
+  timedatectl
   yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
   yum install -y docker-ce docker-ce-cli containerd.io
 }
@@ -253,7 +279,8 @@ function installDockerDebian(){
     gnupg \
     lsb-release \
     tar \
-    lsof
+    lsof \
+    timedatectl
   curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
   echo \
   "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian \
@@ -271,7 +298,8 @@ function installDockerUbuntu(){
     gnupg \
     lsb-release \
     tar \
-    lsof
+    lsof \
+    timedatectl
   curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
   echo \
   "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
@@ -297,6 +325,8 @@ function installDocker() {
       echoContent red "---> 暂不支持该系统"
       exit 0
     fi
+
+    timedatectl set-timezone Asia/Shanghai
 
     systemctl enable docker
     systemctl start docker && docker -v && docker network create trojan-panel-network
@@ -485,6 +515,39 @@ function installMariadb() {
   fi
 }
 
+# 安装Redis
+function installRedis() {
+  if [[ -z $(docker ps -q -f "name=^trojan-panel-redis$") ]]; then
+    echoContent green "---> 安装Redis"
+
+    read -r -p '请输入Redis的端口(默认:6378): ' redis_port
+    [ -z "${redis_port}" ] && redis_port=6378
+    while read -r -p '请输入Redis的密码(必填): ' redis_pass; do
+      if [[ -z ${redis_pass} ]]; then
+        echoContent red "密码不能为空"
+      else
+        break
+      fi
+    done
+
+    docker pull redis:6.2.7 && \
+    docker run -d --name trojan-panel-redis --restart always \
+    -p ${redis_port}:6379 -v ${REDIS_DATA}:/data redis:6.2.7 \
+    redis-server --requirepass "${redis_pass}" &&\
+    docker network connect trojan-panel-network trojan-panel-redis
+
+    if [[ -n $(docker ps -q -f "name=^trojan-panel-redis$") ]]; then
+      echoContent skyBlue "---> Redis安装完成"
+      echoContent yellow "---> Redis的数据库密码(请妥善保存): ${redis_pass}"
+    else
+      echoContent red "---> Redis安装失败"
+      exit 0
+    fi
+  else
+    echoContent skyBlue "---> 你已经安装了Redis"
+  fi
+}
+
 # 安装TrojanPanel
 function installTrojanPanel() {
   if [[ -z $(docker ps -q -f "name=^trojan-panel$") ]]; then
@@ -504,6 +567,18 @@ function installTrojanPanel() {
       fi
     done
 
+    read -r -p '请输入Redis的IP地址(默认:本机Redis): ' redis_host
+    [ -z "${redis_host}" ] && redis_host="trojan-panel-redis"
+    read -r -p '请输入Redis的端口(默认:本机Redis端口): ' redis_port
+    [ -z "${redis_port}" ] && redis_port=6379
+    while read -r -p '请输入Redis的密码(必填): ' redis_pass; do
+      if [[ -z ${redis_pass} ]]; then
+        echoContent red "密码不能为空"
+      else
+        break
+      fi
+    done
+
     if [[ ${mariadb_ip} == "trojan-panel-mariadb" ]];then
       # 初始化数据库
       docker exec trojan-panel-mariadb mysql -u"${mariadb_user}" -p"${mariadb_pas}" -e 'drop database trojan_panel_db;'
@@ -517,12 +592,12 @@ function installTrojanPanel() {
 FROM golang:1.17
 WORKDIR ${TROJAN_PANEL_DATA}
 ADD trojan-panel.tar.gz .
-ENTRYPOINT ["./trojan-panel","-host=${mariadb_ip}","-user=${mariadb_user}","-password=${mariadb_pas}","-port=${mariadb_port}"]
+ENTRYPOINT ["./trojan-panel","-host=${mariadb_ip}","-port=${mariadb_port}","-user=${mariadb_user}","-password=${mariadb_pas}","-redisHost=${redis_host}","-redisPort=${redis_port}","-redisPassword=${redis_pass}"]
 EOF
 
     docker build -t trojan-panel ${TROJAN_PANEL_DATA} \
     && docker run -d --name trojan-panel -p 8081:8081 \
-    -v ${CADDY_SRV}:${TROJAN_PANEL_WEBFILE} -v ${TROJAN_PANEL_LOGS}:${TROJAN_PANEL_LOGS} \
+    -v ${CADDY_SRV}:${TROJAN_PANEL_WEBFILE} -v ${TROJAN_PANEL_LOGS}:${TROJAN_PANEL_LOGS} -v /etc/localtime:/etc/localtime \
     --restart always trojan-panel \
     && docker network connect trojan-panel-network trojan-panel
     if [[ -n $(docker ps -q -f "name=^trojan-panel$") ]]; then
@@ -593,7 +668,7 @@ EOF
   docker build -t trojan-panel-ui ${TROJAN_PANEL_UI_DATA} \
   && docker run -d --name trojan-panel-ui -p 8888:80 --restart always \
   -v ${NGINX_CONFIG}:/etc/nginx/conf.d/default.conf \
-  -v ${CADDY_ACME}${domain}:${CADDY_ACME}${domain} trojan-panel-ui \
+  -v ${CADDY_ACME}${domain}:${CADDY_ACME}${domain} trojan-panel-ui -v /etc/localtime:/etc/localtime \
   && docker network connect trojan-panel-network trojan-panel-ui
   if [[ -n $(docker ps -q -f "name=^trojan-panel-ui$") ]]; then
     echoContent skyBlue "---> Trojan Panel前端安装完成"
@@ -607,9 +682,11 @@ EOF
 
   echoContent red "\n=============================================================="
   echoContent skyBlue "Trojan Panel 安装成功"
-  echoContent yellow "MariaDB ${mariadb_user}的数据库密码(请妥善保存): ${mariadb_pas}"
+  echoContent yellow "MariaDB ${mariadb_user}的密码(请妥善保存): ${mariadb_pas}"
+  echoContent yellow "Redis的密码(请妥善保存): ${redis_pass}"
   echoContent yellow "管理面板地址: https://${domain}:8888"
   echoContent yellow "系统管理员 默认用户名: sysadmin 默认密码: 123456 请及时登陆管理面板修改密码"
+  echoContent yellow "Trojan Panel私钥和证书目录: ${CADDY_ACME}${domain}/"
   echoContent red "\n=============================================================="
 }
 
@@ -964,6 +1041,7 @@ EOF
       echoContent yellow "域名: ${domain}"
       echoContent yellow "TrojanGO的端口: ${trojanGO_port}"
       echoContent yellow "TrojanGO的密码: 用户名&密码"
+      echoContent yellow "TrojanGO私钥和证书目录: ${CADDY_ACME}${domain}/"
       if [[ ${trojanGO_websocket_enable} = true ]]; then
           echoContent yellow "Websocket路径: ${trojanGO_websocket_path}"
       fi
@@ -1129,6 +1207,7 @@ function installTrojanGOStandalone() {
   }
 }
 EOF
+
     docker pull p4gefau1t/trojan-go && \
     docker run -d --name trojan-panel-trojanGO-standalone --restart=always \
     -p ${trojanGO_port}:${trojanGO_port} \
@@ -1142,6 +1221,7 @@ EOF
       echoContent yellow "域名: ${domain}"
       echoContent yellow "TrojanGO的端口: ${trojanGO_port}"
       echoContent yellow "TrojanGO的密码: ${trojan_pas}"
+      echoContent yellow "TrojanGO私钥和证书目录: ${CADDY_ACME}${domain}/"
       if [[ ${trojanGO_websocket_enable} = true ]]; then
           echoContent yellow "Websocket路径: ${trojanGO_websocket_path}"
       fi
@@ -1156,6 +1236,135 @@ EOF
     fi
   else
     echoContent skyBlue "---> 你已经了安装了TrojanGO 单机版"
+  fi
+}
+
+function installHysteria(){
+  if [[ -z $(docker ps -q -f "name=^trojan-panel-hysteria$") ]]; then
+    echoContent green "---> 安装Hysteria 数据库版"
+
+    echoContent skyBlue "Hysteria的模式如下:"
+    echoContent yellow "1. udp(默认)"
+    echoContent yellow "2. faketcp"
+    read -r -p '请输入Hysteria的模式(默认:1): ' selectProtocolType
+    [ -z "${selectProtocolType}" ] && selectProtocolType=1
+    case ${selectProtocolType} in
+    1)
+      hysteria_protocol='udp'
+      ;;
+    2)
+      hysteria_protocol='faketcp'
+      ;;
+    *)
+      hysteria_protocol='udp'
+    esac
+    read -r -p '请输入Hysteria的端口(默认:443): ' hysteria_port
+    [ -z "${hysteria_port}" ] && hysteria_port=443
+    read -r -p '请输入Trojan Panel的地址(默认:本机): ' trojan_panel_url
+    [ -z "${trojan_panel_url}" ] && trojan_panel_url=${domain}
+
+    cat >${HYSTERIA_CONFIG} <<EOF
+{
+  "listen": ":${hysteria_port}",
+  "protocol": "${hysteria_protocol}",
+  "cert": "${CADDY_ACME}${domain}/${domain}.crt",
+  "key": "${CADDY_ACME}${domain}/${domain}.key",
+  "auth": {
+    "mode": "external",
+    "config": {
+      "http": "https://${trojan_panel_url}:8888/api/auth/hysteria"
+    }
+  },
+  "prometheus_listen": ":8801"
+}
+EOF
+
+    docker pull tobyxdd/hysteria && \
+    docker run -d --name trojan-panel-hysteria --restart=always \
+    -p ${hysteria_port}:${hysteria_port}/udp -p 8801:8801 \
+    -v ${HYSTERIA_CONFIG}:/etc/hysteria.json -v ${CADDY_ACME}:${CADDY_ACME} \
+    tobyxdd/hysteria -c /etc/hysteria.json server && \
+    docker network connect trojan-panel-network trojan-panel-hysteria
+
+    if [[ -n $(docker ps -q -f "name=^trojan-panel-hysteria$") ]]; then
+      echoContent skyBlue "---> Hysteria 数据版 安装完成"
+      echoContent red "\n=============================================================="
+      echoContent skyBlue "Hysteria节点 数据版 安装成功"
+      echoContent yellow "域名: ${domain}"
+      echoContent yellow "Hysteria的端口: ${hysteria_port}"
+      echoContent yellow "Hysteria的密码: 用户名&密码"
+      echoContent yellow "Hysteria私钥和证书目录: ${CADDY_ACME}${domain}/"
+      echoContent red "\n=============================================================="
+    else
+      echoContent red "---> Hysteria 数据版 安装失败"
+      exit 0
+    fi
+  else
+    echoContent skyBlue "---> 你已经安装了Hysteria 数据版"
+  fi
+}
+
+function installHysteriaStandalone(){
+  if [[ -z $(docker ps -q -f "name=^trojan-panel-hysteria-standalone$") ]]; then
+    echoContent green "---> 安装Hysteria 单机版"
+
+    echoContent skyBlue "Hysteria的模式如下:"
+    echoContent yellow "1. udp(默认)"
+    echoContent yellow "2. faketcp"
+    read -r -p '请输入Hysteria的模式(默认:1): ' selectProtocolType
+    [ -z "${selectProtocolType}" ] && selectProtocolType=1
+    case ${selectProtocolType} in
+    1)
+      hysteria_protocol='udp'
+      ;;
+    2)
+      hysteria_protocol='faketcp'
+      ;;
+    *)
+      hysteria_protocol='udp'
+    esac
+    read -r -p '请输入Hysteria的端口(默认:443): ' hysteria_port
+    [ -z "${hysteria_port}" ] && hysteria_port=443
+    while read -r -p '请输入Hysteria的密码(必填): ' hysteria_password; do
+      if [[ -z ${hysteria_password} ]]; then
+        echoContent red "密码不能为空"
+      else
+        break
+      fi
+    done
+
+    cat >${HYSTERIA_STANDALONE_CONFIG} <<EOF
+{
+  "listen": ":${hysteria_port}",
+  "protocol": "${hysteria_protocol}",
+  "cert": "${CADDY_ACME}${domain}/${domain}.crt",
+  "key": "${CADDY_ACME}${domain}/${domain}.key",
+  "obfs": "${hysteria_password}"
+}
+EOF
+
+    docker pull tobyxdd/hysteria && \
+    docker run -d --name trojan-panel-hysteria-standalone --restart=always \
+    -p ${hysteria_port}:${hysteria_port}/udp \
+    -v ${HYSTERIA_STANDALONE_CONFIG}:/etc/hysteria.json -v ${CADDY_ACME}:${CADDY_ACME} \
+    tobyxdd/hysteria -c /etc/hysteria.json server && \
+    docker network connect trojan-panel-network trojan-panel-hysteria-standalone
+
+    if [[ -n $(docker ps -q -f "name=^trojan-panel-hysteria-standalone$") ]]; then
+      echoContent skyBlue "---> Hysteria 单机版 安装完成"
+      echoContent red "\n=============================================================="
+      echoContent skyBlue "Hysteria节点 单机版 安装成功"
+      echoContent yellow "域名: ${domain}"
+      echoContent yellow "Hysteria的端口: ${hysteria_port}"
+      echoContent yellow "Hysteria的密码: ${hysteria_password}"
+      echoContent yellow "Hysteria私钥和证书目录: ${CADDY_ACME}${domain}/"
+      echoContent red "\n=============================================================="
+    else
+      echoContent red "---> Hysteria 单机版 安装失败"
+      exit 0
+    fi
+  else
+    echoContent skyBlue "---> 你已经安装了Hysteria 单机版"
   fi
 }
 
@@ -1194,6 +1403,8 @@ function updateTrojanPanel() {
     docker exec trojan-panel-mariadb mysql -u"${mariadb_user}" -p"${mariadb_pas}" -e 'drop database trojan_panel_db;'
     docker exec trojan-panel-mariadb mysql -u"${mariadb_user}" -p"${mariadb_pas}" -e 'create database trojan_panel_db;'
   fi
+
+  docekr restart trojan-panel-redis
 
   docker cp ${TROJAN_PANEL_UPDATE_DIR} trojan-panel:${TROJAN_PANEL_DATA} \
   && docker restart trojan-panel \
@@ -1308,6 +1519,42 @@ function uninstallTrojanGOStandalone() {
   fi
 }
 
+function uninstallHysteria(){
+  if [[ -n $(docker ps -q -f "name=^trojan-panel-hysteria") ]]; then
+    echoContent green "---> 卸载Hysteria节点 数据库版"
+
+    # 强制删除容器
+    docker rm -f trojan-panel-hysteria
+    # 删除image
+    docker rmi tobyxdd/hysteria
+
+    # 删除文件
+    rm -f ${HYSTERIA_CONFIG}
+
+    echoContent skyBlue "---> Hysteria节点 数据库版卸载完成"
+  else
+    echoContent red "---> 请先安装Hysteria节点 数据库版"
+  fi
+}
+
+function uninstallHysteriaStandalone(){
+  if [[ -n $(docker ps -q -f "name=^trojan-panel-hysteria-standalone$") ]]; then
+    echoContent green "---> 卸载Hysteria节点 单机版"
+
+    # 强制删除容器
+    docker rm -f trojan-panel-hysteria-standalone
+    # 删除image
+    docker rmi tobyxdd/hysteria
+
+    # 删除文件
+    rm -f ${HYSTERIA_STANDALONE_CONFIG}
+
+    echoContent skyBlue "---> Hysteria节点 单机版卸载完成"
+  else
+    echoContent red "---> 请先安装Hysteria节点 单机版"
+  fi
+}
+
 # 卸载阿里云内置相关监控
 function uninstallAliyun() {
   # 卸载云监控(Cloudmonitor) Java 版
@@ -1353,15 +1600,15 @@ function main() {
   echoContent yellow "4. 更新Trojan Panel(注意: 会清除数据)"
   echoContent yellow "5. 卸载Trojan Panel"
   echoContent green "\n=============================================================="
-  echoContent yellow "6. 安装TrojanGFW+Caddy+Web+TLS节点 数据库版"
-  echoContent yellow "7. 安装TrojanGFW+Caddy+Web+TLS节点 单机版"
-  echoContent yellow "8. 卸载TrojanGFW+Caddy+Web+TLS节点 数据库版"
-  echoContent yellow "9. 卸载TrojanGFW+Caddy+Web+TLS节点 单机版"
+  echoContent yellow "6. 安装TrojanGo+Caddy+Web+TLS+Websocket节点 数据库版"
+  echoContent yellow "7. 安装TrojanGo+Caddy+Web+TLS+Websocket节点 单机版"
+  echoContent yellow "8. 卸载TrojanGo+Caddy+Web+TLS+Websocket节点 数据库版"
+  echoContent yellow "9. 卸载TrojanGo+Caddy+Web+TLS+Websocket节点 单机版"
   echoContent green "\n=============================================================="
-  echoContent yellow "10. 安装TrojanGo+Caddy+Web+TLS+Websocket节点 数据库版"
-  echoContent yellow "11. 安装TrojanGo+Caddy+Web+TLS+Websocket节点 单机版"
-  echoContent yellow "12. 卸载TrojanGo+Caddy+Web+TLS+Websocket节点 数据库版"
-  echoContent yellow "13. 卸载TrojanGo+Caddy+Web+TLS+Websocket节点 单机版"
+  echoContent yellow "10. 安装Hysteria节点 数据库版(测试)"
+  echoContent yellow "11. 安装Hysteria节点 单机版(测试)"
+  echoContent yellow "12. 卸载Hysteria节点 数据库版(测试)"
+  echoContent yellow "13. 卸载Hysteria节点 单机版(测试)"
   read -r -p "请选择:" selectInstallType
   case ${selectInstallType} in
   1)
@@ -1374,6 +1621,7 @@ function main() {
     installDocker
     installCaddyTLS
     installMariadb
+    installRedis
     installTrojanPanel
     ;;
   4)
@@ -1385,34 +1633,34 @@ function main() {
   6)
     installDocker
     installCaddyTLS
-    installTrojanGFW
+    installTrojanGO
     ;;
   7)
     installDocker
     installCaddyTLS
-    installTrojanGFWStandalone
+    installTrojanGOStandalone
     ;;
   8)
-    uninstallTrojanGFW
+    uninstallTrojanGO
     ;;
   9)
-    uninstallTrojanGFWStandalone
+    uninstallTrojanGOStandalone
     ;;
   10)
     installDocker
     installCaddyTLS
-    installTrojanGO
+    installHysteria
     ;;
   11)
     installDocker
     installCaddyTLS
-    installTrojanGOStandalone
+    installHysteriaStandalone
     ;;
   12)
-    uninstallTrojanGO
+    uninstallHysteria
     ;;
   13)
-    uninstallTrojanGOStandalone
+    uninstallHysteriaStandalone
     ;;
   *)
     echoContent red "没有这个选项"
