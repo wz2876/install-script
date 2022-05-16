@@ -668,7 +668,7 @@ EOF
   docker build -t trojan-panel-ui ${TROJAN_PANEL_UI_DATA} \
   && docker run -d --name trojan-panel-ui -p 8888:80 --restart always \
   -v ${NGINX_CONFIG}:/etc/nginx/conf.d/default.conf \
-  -v ${CADDY_ACME}${domain}:${CADDY_ACME}${domain} trojan-panel-ui -v /etc/localtime:/etc/localtime \
+  -v ${CADDY_ACME}${domain}:${CADDY_ACME}${domain} trojan-panel-ui \
   && docker network connect trojan-panel-network trojan-panel-ui
   if [[ -n $(docker ps -q -f "name=^trojan-panel-ui$") ]]; then
     echoContent skyBlue "---> Trojan Panel前端安装完成"
