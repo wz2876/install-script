@@ -1,6 +1,6 @@
 # Trojan Panel
 
-支持多协议的Trojan可视化管理面板
+支持多用户的Trojan可视化管理面板
 
 # Quick installation
 
