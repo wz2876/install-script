@@ -2,18 +2,18 @@
 
 支持多用户的Trojan可视化管理面板
 
+# System Requirements
+
+系统支持: CentOS 7+/Ubuntu 18+/Debian 10+
+
+处理器架构: x86_64/amd64
+
+内存要求: ≥1G
+
 # Quick installation
 
-For CentOS 7+:
-
 ```shell
-yum install -y wget;wget --no-check-certificate -O install_script.sh https://github.com/trojanpanel/install-script/raw/main/install_script.sh;chmod 777 install_script.sh;./install_script.sh
-```
-
-For Ubuntu 18+/Debian 10+:
-
-```shell
-apt install -y wget;wget --no-check-certificate -O install_script.sh https://github.com/trojanpanel/install-script/raw/main/install_script.sh;chmod 777 install_script.sh;./install_script.sh
+source <(curl -L https://github.com/trojanpanel/install-script/raw/main/install_script.sh)
 ```
 
 # Enjoy!
