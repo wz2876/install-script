@@ -2,7 +2,7 @@
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 export PATH
 
-# System Required: CentOS 6+, Debian8+, Ubuntu16+
+# System Required: CentOS 7+/Ubuntu 18+/Debian 10+
 # Version: v1.0.0
 # Description: One click Install Trojan Panel server
 # Author: jonssonyan <https://jonssonyan.com>
@@ -194,23 +194,23 @@ check_sys() {
 
   if [[ -n $(find /etc -name "redhat-release") ]] || grep </proc/version -q -i "centos"; then
     release="centos"
-    if [[ $(arch) =~ ("x86_64"|"amd64"|"arm64"|"aarch64") ]]; then
-      get_arch=$(arch)
-    fi
   elif grep </etc/issue -q -i "debian" && [[ -f "/etc/issue" ]] || grep </etc/issue -q -i "debian" && [[ -f "/proc/version" ]]; then
     release="debian"
-    if [[ $(arch) =~ ("x86_64"|"amd64"|"arm64"|"aarch64"|"arm") ]]; then
-      get_arch=$(arch)
-    fi
   elif grep </etc/issue -q -i "ubuntu" && [[ -f "/etc/issue" ]] || grep </etc/issue -q -i "ubuntu" && [[ -f "/proc/version" ]]; then
     release="ubuntu"
-    if [[ $(arch) =~ ("x86_64"|"amd64"|"arm64"|"aarch64"|"arm"|"s390x") ]]; then
-      get_arch=$(arch)
-    fi
   fi
 
-  if [[ -z "${release}" || -z "${get_arch}" ]]; then
-    echo_content red "暂不支持该系统"
+  if [[ -z "${release}" ]]; then
+    echo_content red "仅支持CentOS 7+/Ubuntu 18+/Debian 10+系统"
+    exit 0
+  fi
+
+  if [[ $(arch) =~ ("x86_64"|"amd64") ]]; then
+    get_arch=$(arch)
+  fi
+
+  if [[ -z "${get_arch}" ]]; then
+    echo_content red "仅支持x86_64/amd64处理器架构"
     exit 0
   fi
 }
@@ -1603,7 +1603,7 @@ main() {
   depend_install
   clear
   echo_content red "\n=============================================================="
-  echo_content skyBlue "System Required: CentOS 6+, Debian8+, Ubuntu16+"
+  echo_content skyBlue "System Required: CentOS 7+/Ubuntu 18+/Debian 10+"
   echo_content skyBlue "Version: v1.0.0"
   echo_content skyBlue "Description: One click Install Trojan Panel server"
   echo_content skyBlue "Author: jonssonyan <https://jonssonyan.com>"
