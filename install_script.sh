@@ -421,15 +421,14 @@ EOF
       kill -9 "$(lsof -i:80,443 -t)"
     fi
 
-    docker pull abiosoft/caddy:1.0.3 && \
+    docker pull teddysun/caddy:1.0.5 && \
     docker run -d --name trojan-panel-caddy --restart always \
     -p 80:80 \
     -p ${caddy_remote_port}:${caddy_remote_port} \
-    -v ${CADDY_Caddyfile}:"/etc/Caddyfile" \
+    -v ${CADDY_Caddyfile}:"/etc/caddy/Caddyfile" \
     -v ${CADDY_ACME}:"/root/.caddy/acme/acme-v02.api.letsencrypt.org/sites/" \
     -v ${CADDY_SRV}:${CADDY_SRV} \
-    -e ACME_AGREE=true \
-    abiosoft/caddy:1.0.3 && \
+    teddysun/caddy:1.0.5 && \
     docker network connect trojan-panel-network trojan-panel-caddy
 
     if [[ -n $(docker ps -q -f "name=^trojan-panel-caddy$") ]]; then
