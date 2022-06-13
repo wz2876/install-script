@@ -6,7 +6,7 @@
 
 系统支持: CentOS 7+/Ubuntu 18+/Debian 10+
 
-处理器架构: x86_64/amd64
+处理器架构: amd64 arm64
 
 内存要求: ≥1G
 
