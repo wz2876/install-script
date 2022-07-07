@@ -203,12 +203,6 @@ check_sys() {
     get_arch=$(arch)
   fi
 
-  if [[ -z "${get_arch}" ]]; then
-    echo_content red "仅支持amd64/arm64处理器架构"
-    exit 0
-  fi
-}
-
 depend_install() {
   if [[ "${package_manager}" != 'yum' && "${package_manager}" != 'dnf' ]]; then
     ${package_manager} update -y
